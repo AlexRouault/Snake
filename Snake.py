@@ -7,7 +7,7 @@ import random
 class SnakeBody:
     def __init__(self, pos):
         self.pos = pos
-        self.rect = pygame.Rect(pos[0] * tile_size + 1, pos[1] * tile_size + 1, tile_size-1, tile_size-1)
+        self.rect = pygame.Rect(pos[0] * tile_size + 1, pos[1] * tile_size + 1 + upper_border, tile_size-1, tile_size-1)
 
     def __add__(self, tup): # Allows us to easily add a vector to the position using '+'
         return SnakeBody((self.pos[0] + tup[0], self.pos[1] + tup[1]))
@@ -70,7 +70,7 @@ class Food:
         self.respawn(snake)
     def respawn(self, snake):
         self.pos = (random.randint(0,width-1), random.randint(0,height-1))
-        self.rect = pygame.Rect(self.pos[0]*tile_size + 1, self.pos[1]*tile_size + 1, tile_size-1, tile_size-1)
+        self.rect = pygame.Rect(self.pos[0]*tile_size + 1, self.pos[1]*tile_size + 1 + upper_border, tile_size-1, tile_size-1)
         if snake.contains(self.pos):
             self.respawn(snake)
     def draw(self):
@@ -111,14 +111,16 @@ def playgame(speed):
 
     # Resize screen
     sc_width = width * tile_size
-    sc_height = height * tile_size
+    sc_height = height * tile_size + upper_border
     size = [sc_width, sc_height]
     pygame.display.set_mode(size)
 
     # initialize game variables
     snake = Snake((width//2, height//2))
     food = Food(snake)
-    score_text = Button(sc_width - 20, 20, 40, 40, (0,0,0), (255,255,255), snake.length)
+    bg_colour = (210, 220, 150)
+    upper_background = pygame.Rect(0, 0, sc_width, upper_border)
+    score_text = Button(sc_width - 20, 20, 40, 40, (0,0,0), bg_colour, snake.length)
 
     # initialize clock. used later in the loop.
     clock = pygame.time.Clock()
@@ -145,17 +147,20 @@ def playgame(speed):
 
         # game logic
         cont = snake.move(dir, food)
+        score_text.update(snake.length)
     
         # draw background
         screen.fill((255,255,255)) 
+        pygame.draw.rect(screen, bg_colour, upper_background)
         for v_line in range(1, width):
-            pygame.draw.line(screen, (240, 240, 240), (v_line * tile_size, 0), (v_line * tile_size, sc_height))
-        for h_line in range(1, height):
-            pygame.draw.line(screen, (240, 240, 240), (0, h_line * tile_size), (sc_width, h_line * tile_size))
+            pygame.draw.line(screen, bg_colour, (v_line * tile_size, upper_border), (v_line * tile_size, sc_height))
+        for h_line in range(0, height):
+            pygame.draw.line(screen, bg_colour, (0, h_line * tile_size + upper_border), (sc_width, h_line * tile_size + upper_border))
         
         # draw foreground
         score_text.draw()
-        snake.draw()
+        if cont:
+            snake.draw()
         food.draw()
         
     
@@ -222,7 +227,7 @@ def setupscreen():
                     speed_val.update(speed + 1)
                 if begin_button.check():
                     playgame(rates[speed])
-                    pygame.display.set_mode([420, 220])
+                    pygame.display.set_mode([default_width * tile_size, default_height * tile_size + upper_border])
 
         # draw background
         screen.fill((255,255,255))
@@ -252,12 +257,16 @@ def setupscreen():
 ###############
  
 # initialize game engine
-width = 21
-height = 11
+default_width = 21
+default_height = 11
 tile_size = 20
+upper_border = 50
+
+width = default_width
+height = default_height
 
 pygame.init()
-screen = pygame.display.set_mode([width * tile_size, height * tile_size])
+screen = pygame.display.set_mode([default_width * tile_size, default_height * tile_size + upper_border])
 pygame.display.set_caption('Snake')
 
 setupscreen()
