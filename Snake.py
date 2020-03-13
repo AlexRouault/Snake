@@ -7,30 +7,72 @@ import random
 class SnakeBody:
     def __init__(self, pos):
         self.pos = pos
-        self.rect = pygame.Rect(pos[0] * tile_size + 1, pos[1] * tile_size + 1 + upper_border, tile_size-1, tile_size-1)
+        self.rect = pygame.Rect(pos[0] * tile_size + 1, pos[1] * tile_size + upper_border + 1, tile_size-1, tile_size-1)
+
+        # Determine how we will draw body piece
+        self.on_bridge = False
+        self.under_bridge = False
+
+        # key values for drawing body piece if we are on a bridge
+        self.top = self.pos[1] * tile_size + upper_border
+        self.left = self.pos[0] * tile_size
+        self.right = self.left + tile_size
+        self.bottom = self.top + tile_size
+        self.inset = tile_size // 5
 
     def __add__(self, tup): # Allows us to easily add a vector to the position using '+'
         return SnakeBody((self.pos[0] + tup[0], self.pos[1] + tup[1]))
 
     def draw(self, colour):
-        pygame.draw.rect(screen, colour, self.rect)
+        if self.on_bridge:
+            self.points = [
+                (self.left, self.top + 1), 
+                (self.left + self.inset, self.top + self.inset + 1), 
+                (self.right - self.inset, self.top + self.inset + 1),
+                (self.right, self.top + 1),
+                (self.right, self.bottom - 1),
+                (self.right - self.inset, self.bottom - self.inset - 1),
+                (self.left + self.inset, self.bottom - self.inset - 1), 
+                (self.left, self.bottom - 1)
+            ]
+            pygame.draw.polygon(screen, colour, self.points)
+        elif self.under_bridge:
+            self.top_points = [
+                (self.left + 1, self.top), 
+                (self.left + self.inset, self.top + self.inset - 1), 
+                (self.right - self.inset, self.top + self.inset - 1),
+                (self.right - 1, self.top)
+            ]
+            self.bottom_points = [
+                (self.right - 1, self.bottom),
+                (self.right - self.inset, self.bottom - self.inset + 1),
+                (self.left + self.inset, self.bottom - self.inset + 1), 
+                (self.left + 1, self.bottom)
+            ]
+            pygame.draw.polygon(screen, colour, self.top_points)
+            pygame.draw.polygon(screen, colour, self.bottom_points)
+        else:
+            pygame.draw.rect(screen, colour, self.rect)
 
 
 class Snake:
     def __init__(self, pos):
         self.body = [SnakeBody(pos)]
         self.length = 1
+        self.on_bridge = False
+        self.under_bridge = False
 
-    def draw(self):
+    def draw(self, bridge):
         green = (150,255,0)
         yellow = (230,255,0)
+
         for i in range(len(self.body)):
             if i % 2:
                 self.body[i].draw(yellow)
             else:
                 self.body[i].draw(green)
 
-    def move(self, dir, food):
+    def move(self, dir, food, bridge):
         if dir != (0,0): # Prevent new piece from being added if snake is not moving
             new_head = self.body[0] + dir
             self.body = [new_head] + self.body # add new_head to front of body
@@ -42,19 +84,44 @@ class Snake:
             # Didn't eat, so remove tail to maintain size
             self.body.pop()
 
-        # Detect collision with wall
-        if self.body[0].pos[0] < 0 or self.body[0].pos[0] >= width:
-            return False
-        if self.body[0].pos[1] < 0 or self.body[0].pos[1] >= height:
+        # Detect collisions
+        if self.is_crashed(bridge):
             return False
 
-        # Detect collision with self
-        if len(self.body) != 1: # Avoid out of range case when length is 1
-            for i in range(1, len(self.body)): # every non-head body piece
-                if self.body[0].pos == self.body[i].pos:
-                    return False
+        self.on_bridge = False
+        self.under_bridge = False
+        if self.body[0].pos == bridge.pos: # moving onto bridge
+            if dir[0] != 0 and dir[1] == 0: # moving laterally
+                self.on_bridge = True
+                self.body[0].on_bridge = True
+            else: # moving longitudinally
+                self.under_bridge = True
+                self.body[0].under_bridge = True
                     
         return True # Continue game
+
+    def is_crashed(self, bridge):
+        # Detect collision with wall
+        if self.body[0].pos[0] < 0 or self.body[0].pos[0] >= width:
+            return True
+        if self.body[0].pos[1] < 0 or self.body[0].pos[1] >= height:
+            return True
+
+        # Detect collision with self
+        if not self.body[0].pos == bridge.pos: # On bridge -> no collision
+            if self.length > 2:
+                for i in range(1, len(self.body)): # every non-head body piece
+                    if self.body[0].pos == self.body[i].pos:
+                        return True
+
+        # Detect collision with bridge
+        if self.on_bridge: # Head was on top of bridge
+            if self.body[0].pos[1] != bridge.pos[1]: # Moved longitudinally off of bridge
+                return True
+        elif self.under_bridge:
+            if self.body[0].pos[0] != bridge.pos[0]: # Moved laterally from underpass
+                return True
+        return False
 
     def contains(self, pos): # Determines whether a cell is part of the snake
         for seg in self.body:
@@ -75,6 +142,33 @@ class Food:
             self.respawn(snake)
     def draw(self):
         pygame.draw.rect(screen, (255,0,0), self.rect)
+
+class Bridge:
+    def __init__(self, snake):
+        self.pos = (random.randint(1,width-2), random.randint(1,height-2))
+        while snake.contains(self.pos): # Avoid bridge generating under snake
+            self.pos = (random.randint(1,width-2), random.randint(1,height-2))
+
+        self.top = self.pos[1] * tile_size + upper_border
+        self.left = self.pos[0] * tile_size
+        self.right = self.left + tile_size
+        self.bottom = self.top + tile_size
+        self.inset = tile_size // 5
+        self.top_edge = [
+            (self.left, self.top), 
+            (self.left + self.inset, self.top + self.inset), 
+            (self.right - self.inset, self.top + self.inset),
+            (self.right, self.top)
+        ]
+        self.bottom_edge = [
+            (self.left, self.bottom), 
+            (self.left + self.inset, self.bottom - self.inset), 
+            (self.right - self.inset, self.bottom - self.inset),
+            (self.right, self.bottom)
+        ]
+    def draw(self):
+        pygame.draw.lines(screen, (0,0,0), False, self.top_edge) 
+        pygame.draw.lines(screen, (0,0,0), False, self.bottom_edge) 
 
 class Button:
     def __init__(self, x, y, width, height, text_colour, bg_colour, text):
@@ -118,6 +212,9 @@ def playgame(speed):
     # initialize game variables
     snake = Snake((width//2, height//2))
     food = Food(snake)
+    bridge = Bridge(snake)
+
+    # initialize console variables
     bg_colour = (210, 220, 150)
     upper_background = pygame.Rect(0, 0, sc_width, upper_border)
     score_text = Button(sc_width - 20, 20, 40, 40, (0,0,0), bg_colour, snake.length)
@@ -135,6 +232,7 @@ def playgame(speed):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
+                exit()
             if event.type == pygame.KEYDOWN:
                 if event.key == 273: # up
                     dir = (0,-1)
@@ -146,7 +244,7 @@ def playgame(speed):
                     dir = (-1,0)
 
         # game logic
-        cont = snake.move(dir, food)
+        cont = snake.move(dir, food, bridge)
         score_text.update(snake.length)
     
         # draw background
@@ -156,11 +254,12 @@ def playgame(speed):
             pygame.draw.line(screen, bg_colour, (v_line * tile_size, upper_border), (v_line * tile_size, sc_height))
         for h_line in range(0, height):
             pygame.draw.line(screen, bg_colour, (0, h_line * tile_size + upper_border), (sc_width, h_line * tile_size + upper_border))
+        bridge.draw()
         
         # draw foreground
         score_text.draw()
         if cont:
-            snake.draw()
+            snake.draw(bridge)
         food.draw()
         
     
@@ -206,6 +305,7 @@ def setupscreen():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
+                exit()
             if event.type == pygame.MOUSEBUTTONUP:
                 if width_dec.check() and width > 7:
                     width -= 2
