@@ -1,3 +1,6 @@
+# TODO:
+# Prevent bridges from overlapping - not important
+
 import pygame
 import random
 
@@ -61,8 +64,9 @@ class Snake:
         self.length = 1
         self.on_bridge = False
         self.under_bridge = False
+        self.last_dir = None
 
-    def draw(self, bridge):
+    def draw(self, bridges):
         green = (150,255,0)
         yellow = (230,255,0)
 
@@ -72,7 +76,7 @@ class Snake:
             else:
                 self.body[i].draw(green)
 
-    def move(self, dir, food, bridge):
+    def move(self, dir, food, bridges):
         if dir != (0,0): # Prevent new piece from being added if snake is not moving
             new_head = self.body[0] + dir
             self.body = [new_head] + self.body # add new_head to front of body
@@ -85,43 +89,45 @@ class Snake:
             self.body.pop()
 
         # Detect collisions
-        if self.is_crashed(bridge):
+        if self.is_crashed(dir, bridges):
             return False
 
-        self.on_bridge = False
-        self.under_bridge = False
-        if self.body[0].pos == bridge.pos: # moving onto bridge
-            if dir[0] != 0 and dir[1] == 0: # moving laterally
-                self.on_bridge = True
-                self.body[0].on_bridge = True
-            else: # moving longitudinally
-                self.under_bridge = True
-                self.body[0].under_bridge = True
+        self.last_dir = dir
                     
         return True # Continue game
 
-    def is_crashed(self, bridge):
+    def is_crashed(self, dir, bridges):
         # Detect collision with wall
         if self.body[0].pos[0] < 0 or self.body[0].pos[0] >= width:
             return True
         if self.body[0].pos[1] < 0 or self.body[0].pos[1] >= height:
             return True
 
+        # Detect collision with bridge
+        if self.on_bridge or self.under_bridge:
+            if dir != self.last_dir: # change of direciction
+                return True
+
+        self.on_bridge = False
+        self.under_bridge = False
+        for bridge in bridges:
+            if self.body[0].pos == bridge.pos: # moving onto bridge
+                if dir[0] != 0 and dir[1] == 0: # moving laterally
+                    self.on_bridge = True
+                    self.body[0].on_bridge = True
+                else: # moving longitudinally
+                    self.under_bridge = True
+                    self.body[0].under_bridge = True
+
         # Detect collision with self
-        if not self.body[0].pos == bridge.pos: # On bridge -> no collision
+        if not (self.on_bridge or self.under_bridge): # On bridge -> no collision
             if self.length > 2:
                 for i in range(1, len(self.body)): # every non-head body piece
                     if self.body[0].pos == self.body[i].pos:
                         return True
-
-        # Detect collision with bridge
-        if self.on_bridge: # Head was on top of bridge
-            if self.body[0].pos[1] != bridge.pos[1]: # Moved longitudinally off of bridge
-                return True
-        elif self.under_bridge:
-            if self.body[0].pos[0] != bridge.pos[0]: # Moved laterally from underpass
-                return True
+        
         return False
+
 
     def contains(self, pos): # Determines whether a cell is part of the snake
         for seg in self.body:
@@ -203,6 +209,8 @@ def playgame(speed):
 
     global tile_size
 
+    num_bridges = 3
+
     # Resize screen
     sc_width = width * tile_size
     sc_height = height * tile_size + upper_border
@@ -212,7 +220,9 @@ def playgame(speed):
     # initialize game variables
     snake = Snake((width//2, height//2))
     food = Food(snake)
-    bridge = Bridge(snake)
+    bridges = []
+    for i in range(num_bridges):
+        bridges.append(Bridge(snake))
 
     # initialize console variables
     bg_colour = (210, 220, 150)
@@ -244,7 +254,7 @@ def playgame(speed):
                     dir = (-1,0)
 
         # game logic
-        cont = snake.move(dir, food, bridge)
+        cont = snake.move(dir, food, bridges)
         score_text.update(snake.length)
     
         # draw background
@@ -254,12 +264,13 @@ def playgame(speed):
             pygame.draw.line(screen, bg_colour, (v_line * tile_size, upper_border), (v_line * tile_size, sc_height))
         for h_line in range(0, height):
             pygame.draw.line(screen, bg_colour, (0, h_line * tile_size + upper_border), (sc_width, h_line * tile_size + upper_border))
-        bridge.draw()
+        for bridge in bridges:
+            bridge.draw()
         
         # draw foreground
         score_text.draw()
         if cont:
-            snake.draw(bridge)
+            snake.draw(bridges)
         food.draw()
         
     
